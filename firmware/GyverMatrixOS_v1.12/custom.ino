@@ -328,7 +328,29 @@ void timeSet(boolean type, boolean dir) {    // type: 0-часы, 1-минуты
 }
 
 void btnsModeChange() {
+
+  
 #if (USE_BUTTONS == 1)
+
+  if (bt_left.pressed()) {
+    Serial.println("left AUTOPLAY = true");
+    AUTOPLAY = true;
+  }
+  if (bt_right.pressed()) {
+    Serial.println("right AUTOPLAY = false");
+    AUTOPLAY = false;
+  }
+  if (bt_up.pressed()) {
+    Serial.println("up prevMode");
+    prevMode();
+  }
+  if (bt_down.pressed()) {
+    Serial.println("down nextMode");
+    nextMode();
+  }
+  
+
+/*
   if (bt_set.clicked()) {
     if (gamemodeFlag) gameDemo = !gameDemo;
     if (gameDemo) {
@@ -434,5 +456,6 @@ void btnsModeChange() {
         }
       }
   }
+  */
 #endif
 }
