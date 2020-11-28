@@ -225,7 +225,7 @@ void gameOverTetris() {
 
 // новый раунд
 void newGameTetris() {
-  Serial.println("lolkek");   // без этого работает некорректно! магия ебаная
+  DBG_PRINTLN("lolkek");   // без этого работает некорректно! магия ебаная
   delay(10);
   buttons = 4;
   height = HEIGHT;    // высота = высоте матрицы

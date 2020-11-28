@@ -62,7 +62,7 @@
 //  break;
 
 // не забудьте указать количество режимов для корректного переключения с последнего на первый
-#define MODES_AMOUNT 27   // количество кастомных режимов (которые переключаются сами или кнопкой)
+#define MODES_AMOUNT 18   // количество кастомных режимов (которые переключаются сами или кнопкой)
 
 void customModes() {
   switch (thisMode) {
@@ -103,28 +103,35 @@ void customModes() {
       break;
     case 17: fireRoutine();
       break;
+
+//    case 18: brightnessRoutine();
+//      break;
+//    case 18: colorsRoutine();
+//      break;
+//    case 20: rainbowColorsRoutine();
+//      break;
       
-    case 18: snakeRoutine();
+    case 21: snakeRoutine();
       break;
-    case 19: tetrisRoutine();
+    case 22: tetrisRoutine();
       break;
-    case 20: mazeRoutine();
+    case 23: mazeRoutine();
       break;
-    case 21: runnerRoutine();
+    case 24: runnerRoutine();
       break;
-    case 22: flappyRoutine();
+    case 25: flappyRoutine();
       break;
-    case 23: arkanoidRoutine();
+    case 26: arkanoidRoutine();
       break;
 
-    case 24: fillString("1", CRGB::Red);
+    case 27: fillString("1", CRGB::Red);
       break;
-    case 25: fillString("2", 1);
+    case 28: fillString("2", 1);
       break;
-    case 26: fillString("3", 2);
+    case 29: fillString("3", 2);
       break;
       
-//    case 27: clockRoutine();
+//    case 30: clockRoutine();
 //      break;
 
 
@@ -196,6 +203,9 @@ void nextModeHandler() {
   gamemodeFlag = false;
   FastLED.clear();
   FastLED.show();
+  #if (BT_MODE == 2)
+  sendSettingsUpdate();
+  #endif
 }
 void prevModeHandler() {
   thisMode--;
@@ -204,6 +214,9 @@ void prevModeHandler() {
   gamemodeFlag = false;
   FastLED.clear();
   FastLED.show();
+  #if (BT_MODE == 2)
+  sendSettingsUpdate();
+  #endif
 }
 
 int fadeBrightness;
@@ -333,19 +346,19 @@ void btnsModeChange() {
 #if (USE_BUTTONS == 1)
 
   if (bt_left.pressed()) {
-    Serial.println("left AUTOPLAY = true");
+    DBG_PRINTLN("left AUTOPLAY = true");
     AUTOPLAY = true;
   }
   if (bt_right.pressed()) {
-    Serial.println("right AUTOPLAY = false");
+    DBG_PRINTLN("right AUTOPLAY = false");
     AUTOPLAY = false;
   }
   if (bt_up.pressed()) {
-    Serial.println("up prevMode");
+    DBG_PRINTLN("up prevMode");
     prevMode();
   }
   if (bt_down.pressed()) {
-    Serial.println("down nextMode");
+    DBG_PRINTLN("down nextMode");
     nextMode();
   }
   

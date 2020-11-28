@@ -1,23 +1,36 @@
 // вкладка работы с bluetooth
 
+void sendSettingsUpdate();
+
+byte prevY = 0;
+byte prevX = 0;
+
+boolean gameFlag;
+boolean runningFlag;
+
 #if (BT_MODE == 1)
 #define PARSE_AMOUNT 4    // максимальное количество значений в массиве, который хотим получить
 #define header '$'        // стартовый символ
 #define divider ' '       // разделительный символ
 #define ending ';'        // завершающий символ
 
-byte prevY = 0;
-byte prevX = 0;
-boolean runningFlag;
-boolean gameFlag;
+//byte prevY = 0;
+//byte prevX = 0;
+//boolean runningFlag;
+//boolean gameFlag;
 boolean effectsFlag;
+boolean recievedFlag;
 byte game;
 byte effect;
 byte intData[PARSE_AMOUNT];     // массив численных значений после парсинга
 uint32_t prevColor;
-boolean recievedFlag;
+boolean msgRecieved;
 byte lastMode = 0;
 boolean parseStarted;
+
+void sendSettingsUpdate() {
+  
+}
 
 void bluetoothRoutine() {
   parsing();                           // принимаем данные
@@ -139,6 +152,20 @@ void parsing() {
   if (recievedFlag) {      // если получены данные
     recievedFlag = false;
 
+
+    DBG_PRINTLN("MSG: ");
+    for (byte i = 0; i < parse_index; i++) {
+      DBG_PRINT(intData[i]);
+      DBG_PRINT(" ");
+    } 
+    DBG_PRINTLN(" ");
+    for (byte i = 0; i < parse_index; i++) {
+      DBG_PRINT(intData[i],HEX);
+      DBG_PRINT(" ");
+    } 
+    DBG_PRINTLN("===========");
+
+
     if (intData[0] != 16) {
       idleTimer.reset();
       idleState = false;
@@ -248,14 +275,35 @@ void parsing() {
   }
 
   // ****************** ПАРСИНГ *****************
-  if (Serial.available() > 0) {
+ #if HARDWARE_BT_SERIAL
+    if (Serial.available() > 0) {
+#else
+    if (btSerial.available() > 0) {
+#endif
+ // if (Serial.available() > 0) {
     char incomingByte;
     if (parseMode == TEXT) {     // если нужно принять строку
-      runningText = Serial.readString();  // принимаем всю
+ #if HARDWARE_BT_SERIAL
+        runningText = Serial.readString();
+#else
+        runningText = btSerial.readString();
+#endif
+      DBG_PRINT("runningText: ");
+      DBG_PRINTLN(runningText);
+      //runningText = Serial.readString();  // принимаем всю
       incomingByte = ending;              // сразу завершаем парс
       parseMode = NORMAL;
     } else {
-      incomingByte = Serial.read();        // обязательно ЧИТАЕМ входящий символ
+#if HARDWARE_BT_SERIAL
+        incomingByte = Serial.read(); 
+#else
+        incomingByte = btSerial.read(); 
+#endif
+        DBG_PRINT("b: ");
+        DBG_PRINT(incomingByte,HEX);
+        DBG_PRINT(" - ");
+        DBG_PRINTLN(incomingByte);
+    //  incomingByte = Serial.read();        // обязательно ЧИТАЕМ входящий символ
     }
     if (parseStarted) {                         // если приняли начальный символ (парсинг разрешён)
       if (incomingByte != divider && incomingByte != ending) {   // если это не пробел И не конец
@@ -295,7 +343,7 @@ void parsing() {
 
 // hex string to uint32_t
 uint32_t HEXtoInt(String hexValue) {
-  byte tens, ones, number1, number2, number3;
+  byte tens, ones, number1, number2, number3, number4;
   tens = (hexValue[0] < '9') ? hexValue[0] - '0' : hexValue[0] - '7';
   ones = (hexValue[1] < '9') ? hexValue[1] - '0' : hexValue[1] - '7';
   number1 = (16 * tens) + ones;
@@ -311,8 +359,275 @@ uint32_t HEXtoInt(String hexValue) {
   return ((uint32_t)number1 << 16 | (uint32_t)number2 << 8 | number3 << 0);
 }
 
+
+
+#elif (BT_MODE == 2)
+
+#define HEADER_SYMBOL '$'
+
+boolean msgRecieved;
+boolean getStarted;
+
+uint32_t parseTimer;
+uint16_t parseWaitPeriod = 2*1000; // timeout 2 sec
+
+uint8_t bleMsg[255];
+byte byte_index = 0;
+byte expected_bytes = 0;
+
+void sendCommand(uint8_t cmd[], uint8_t len) {
+#if HARDWARE_BT_SERIAL
+    Serial.write(cmd,len);
+#else
+    btSerial.write(cmd,len);
+#endif
+}
+
+void sendSettingsUpdate() {
+    sendSettings(true);
+}
+
+void sendSettings() {
+    sendSettings(false);
+}
+
+void sendSettings(bool isNotification) {
+    uint8_t cmd[7];
+    cmd[0] = isNotification ? 0xB4 : 0xB5;
+    cmd[1] = 0x05;
+    cmd[2] = AUTOPLAY ? 0x01 : 0x00;
+    cmd[3] = thisMode;
+    cmd[4] = globalBrightness;
+    cmd[5] = globalSpeed;
+    cmd[6] = (uint8_t)(autoplayTime/1000/60);
+    sendCommand(cmd,cmd[1]+2);
+}
+
+void successResponse() {
+    uint8_t cmd[3]; 
+    cmd[0] = 0xB0;
+    cmd[1] = 0x01;
+    cmd[2] = 0x01;
+    sendCommand(cmd,cmd[1]+2);
+}
+
+void switchToGame(uint8_t game) {
+  switch (game) {
+    case 0:
+      snakeRoutine();
+      break;
+    case 1:
+      tetrisRoutine();
+      break;
+    case 2:
+      mazeRoutine();
+      break;
+    case 3:
+      runnerRoutine();
+      break;
+    case 4:
+      flappyRoutine();
+      break;
+    case 5:
+      arkanoidRoutine();
+      break;
+  }
+}
+
+void applyEffect(uint8_t effect) {
+      FastLED.clear();
+      FastLED.show();
+      thisMode = effect;
+      autoplayTimer = millis();
+}
+
+void bluetoothRoutine() {
+    incomingMsgHandler();
+    if (msgRecieved) {
+        handleNewMsg();
+    }
+}
+
+void handleNewMsg() {
+    msgRecieved = false;
+
+    DBG_PRINTLN("msgRecieved");
+
+    bool needSendSuccessResponse = false;
+    bool needSendSettingsResponse = false;
+
+    switch (bleMsg[0]) {
+        case 0:
+            needSendSettingsResponse = true;
+            break;
+        case 1: 
+            drawPixelXY(bleMsg[1], bleMsg[2], gammaCorrection(globalColor));
+            FastLED.show();
+            needSendSuccessResponse = true;
+            break;
+        case 2:
+            fillAll(gammaCorrection(globalColor));
+            FastLED.show();
+            needSendSuccessResponse = true;
+            break;
+        case 3:
+            FastLED.clear();
+            FastLED.show();
+            needSendSuccessResponse = true;
+            break;
+        case 4:
+            globalBrightness = bleMsg[1];
+            breathBrightness = globalBrightness;
+            FastLED.setBrightness(globalBrightness);
+            FastLED.show();
+            needSendSuccessResponse = true;
+            break;
+        case 5:
+            drawPixelXY(bleMsg[2], bleMsg[3], gammaCorrection(globalColor));
+            // делаем обновление матрицы каждую строчку, чтобы реже обновляться
+            // и не пропускать пакеты данных (потому что отправка на большую матрицу занимает много времени)
+            if (prevY != bleMsg[3] || ( (bleMsg[3] == 0) && (bleMsg[2] == WIDTH - 1) ) ) {
+                prevY = bleMsg[3];
+                FastLED.show();
+            }
+            needSendSuccessResponse = true;
+            break;
+        case 6:
+            loadingFlag = true;
+            needSendSuccessResponse = true;
+            break;
+        case 7:
+            runningFlag = bleMsg[1] == 1;
+            needSendSuccessResponse = true;
+            break;
+        case 8:
+            if (bleMsg[1] == 0) {
+                gameFlag = false;
+                loadingFlag = true;
+                breathBrightness = globalBrightness;
+                FastLED.setBrightness(globalBrightness);    // возвращаем яркость
+                applyEffect(bleMsg[2]);
+            } 
+            needSendSuccessResponse = true;
+            break;
+        case 9:
+            globalSpeed = bleMsg[2];
+            gameSpeed = globalSpeed * 4;
+            gameTimer.setInterval(gameSpeed);
+            switchToGame(bleMsg[1]);
+            needSendSuccessResponse = true;
+            break;
+        case 10:
+            buttons = bleMsg[1];
+            controlFlag = true;
+            needSendSuccessResponse = true;
+            break;
+        case 11:
+            break;
+        case 12:
+            break;
+        case 13:
+            break;
+        case 14:
+            gameFlag = !gameFlag;
+            needSendSuccessResponse = true;
+            break;
+        case 15:
+            globalSpeed = bleMsg[1];
+            effectTimer.setInterval((int)globalSpeed+30);
+            needSendSuccessResponse = true;
+            break;
+        case 16:
+            if (bleMsg[1] == 0) {
+                AUTOPLAY = true;
+                needSendSettingsResponse = true;
+            } else if (bleMsg[1] == 1) {
+                AUTOPLAY = false;
+                needSendSettingsResponse = true;
+            } else if (bleMsg[1] == 2) {
+                prevMode();
+                // a message with the settings will be send after switch to next mode
+            } else if (bleMsg[1] == 3) {
+                nextMode();
+                // a message with the settings will be send after switch to next mode
+            }
+            
+            break;
+        case 17:
+            autoplayTime = ((long)bleMsg[1] * 60 * 1000);
+            autoplayTimer = millis();
+            needSendSuccessResponse = true;
+            break;                                   
+    }   
+
+    if (needSendSuccessResponse) {
+        successResponse();
+    }
+
+    if (needSendSettingsResponse) {
+        sendSettings();
+    }
+}
+
+void incomingMsgHandler() {
+
+    // the check for make sure we are not freazing in the case wrong message
+    if (getStarted) {
+        if ((millis() - parseTimer >= parseWaitPeriod)) {
+            parseTimer = millis();
+            getStarted = false;
+            expected_bytes = 0;
+            byte_index = 0;
+            DBG_PRINTLN("Reset parse msg by timeout");
+        }
+    }
+
+#if HARDWARE_BT_SERIAL
+    if (Serial.available() > 0) {
+        uint8_t incomingByte = Serial.read();      // обязательно ЧИТАЕМ входящий символ
+#else
+    if (btSerial.available() > 0) {
+        uint8_t incomingByte = btSerial.read();      // обязательно ЧИТАЕМ входящий символ
+#endif
+        parseTimer = millis();
+
+        DBG_PRINT("b: ");
+        DBG_PRINT(incomingByte,HEX);
+        DBG_PRINT(" - ");
+        DBG_PRINTLN(incomingByte);
+    
+        if (getStarted) {
+            if (expected_bytes == 0) {
+                expected_bytes = incomingByte;
+                DBG_PRINT("expected_bytes: ");
+                DBG_PRINTLN(expected_bytes);
+            } else {
+                bleMsg[byte_index] = incomingByte;
+                byte_index++;
+            }
+
+//            DBG_PRINT("byte_index: ");
+//            DBG_PRINTLN(byte_index);
+
+            if (expected_bytes == byte_index) {
+                getStarted = false;
+                msgRecieved = true;
+            }
+        } else {
+            if (incomingByte == HEADER_SYMBOL) {
+                getStarted = true;
+                expected_bytes = 0;
+                byte_index = 0;
+            }
+        }
+    }
+}
+
 #elif (BT_MODE == 0)
 void bluetoothRoutine() {
   return;
+}
+void sendSettingsUpdate() {
+  
 }
 #endif

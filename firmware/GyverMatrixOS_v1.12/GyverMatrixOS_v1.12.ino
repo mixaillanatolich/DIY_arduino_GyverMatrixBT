@@ -16,11 +16,14 @@
 // ************************ МАТРИЦА *************************
 // если прошивка не лезет в Arduino NANO - отключай режимы! Строка 60 и ниже
 
-#define BRIGHTNESS 240        // стандартная маскимальная яркость (0-255)
-#define CURRENT_LIMIT 5000    // лимит по току в миллиамперах, автоматически управляет яркостью (пожалей свой блок питания!) 0 - выключить лимит
+#define BRIGHTNESS 254        // стандартная маскимальная яркость (0-255)
+#define CURRENT_LIMIT 100    // лимит по току в миллиамперах, автоматически управляет яркостью (пожалей свой блок питания!) 0 - выключить лимит
 
-#define WIDTH 14              // ширина матрицы
-#define HEIGHT 9             // высота матрицы
+//#define WIDTH 14              // ширина матрицы
+//#define HEIGHT 9             // высота матрицы
+
+#define WIDTH 16              // ширина матрицы
+#define HEIGHT 16             // высота матрицы
 #define SEGMENTS 1            // диодов в одном "пикселе" (для создания матрицы из кусков ленты)
 
 #define COLOR_ORDER GRB       // порядок цветов на ленте. Если цвет отображается некорректно - меняйте. Начать можно с RGB
@@ -31,7 +34,26 @@
 // при неправильной настрйоке матрицы вы получите предупреждение "Wrong matrix parameters! Set to default"
 // шпаргалка по настройке матрицы здесь! https://alexgyver.ru/matrix_guide/
 
-#define MCU_TYPE 0            // микроконтроллер: 
+
+#define HARDWARE_BT_SERIAL        0 
+
+#if HARDWARE_BT_SERIAL
+#define LOG_ON        0 
+#else
+#define LOG_ON        1           // Включить лог  1 - включить лог
+#endif
+
+
+#if LOG_ON
+# define DBG_PRINT(...)    Serial.print(__VA_ARGS__)
+# define DBG_PRINTLN(...)  Serial.println(__VA_ARGS__)
+#else
+# define DBG_PRINT(...)
+# define DBG_PRINTLN(...)
+#endif
+
+
+#define MCU_TYPE 1            // микроконтроллер: 
 //                            0 - AVR (Arduino NANO/MEGA/UNO)
 //                            1 - ESP8266 (NodeMCU, Wemos D1)
 //                            2 - STM32 (Blue Pill)
@@ -45,7 +67,7 @@
 
 boolean AUTOPLAY = 1;         // 0 выкл / 1 вкл автоматическую смену режимов (откл. можно со смартфона)
 int AUTOPLAY_PERIOD = 300;     // время между авто сменой режимов (секунды)
-#define IDLE_TIME 20          // время бездействия кнопок или Bluetooth (в секундах) после которого запускается автосмена режимов и демо в играх
+#define IDLE_TIME 60          // время бездействия кнопок или Bluetooth (в секундах) после которого запускается автосмена режимов и демо в играх
 
 // о поддерживаемых цветах читай тут https://alexgyver.ru/gyvermatrixos-guide/
 #define GLOBAL_COLOR_1 CRGB::Green    // основной цвет №1 для игр
@@ -58,8 +80,8 @@ int AUTOPLAY_PERIOD = 300;     // время между авто сменой р
 // внимание! отключение модуля НЕ УБИРАЕТ его эффекты из списка воспроизведения!
 // Это нужно сделать вручную во вкладке custom, удалив ненужные функции
 
-#define USE_BUTTONS 1         // использовать физические кнопки управления играми (0 нет, 1 да)
-#define BT_MODE 1             // использовать блютус (0 нет, 1 да)
+#define USE_BUTTONS 0         // использовать физические кнопки управления играми (0 нет, 1 да)
+#define BT_MODE 2             // использовать блютус (0 нет, 1 да, 2 - BLE)
 #define USE_NOISE_EFFECTS 1   // крутые полноэкранные эффекты (0 нет, 1 да) СИЛЬНО ЖРУТ ПАМЯТЬ!!!11
 #define USE_FONTS 1           // использовать буквы (бегущая строка) (0 нет, 1 да)
 #define USE_CLOCK 0           // использовать часы (0 нет, 1 да)
@@ -80,7 +102,17 @@ int AUTOPLAY_PERIOD = 300;     // время между авто сменой р
 #define BUTT_DOWN 5         // кнопка вниз
 #define BUTT_LEFT 2         // кнопка влево
 #define BUTT_RIGHT 4        // кнопка вправо
+
+
+
+#if HARDWARE_BT_SERIAL
 #define BUTT_SET 7          // кнопка выбор/игра
+#else
+#include <SoftwareSerial.h>
+#define BT_RX 7
+#define BT_TX 8
+SoftwareSerial btSerial(BT_TX, BT_RX); // RX, TX
+#endif
 
 // пины подписаны согласно pinout платы, а не надписям на пинах!
 // esp8266 - плату выбирал Wemos D1 R1
@@ -91,6 +123,17 @@ int AUTOPLAY_PERIOD = 300;     // время между авто сменой р
 #define BUTT_LEFT 0         // кнопка влево
 #define BUTT_RIGHT 12       // кнопка вправо
 #define BUTT_SET 15         // кнопка выбор/игра
+
+#if HARDWARE_BT_SERIAL
+#define BUTT_SET 7          // кнопка выбор/игра
+#else
+#include <SoftwareSerial.h>
+#define BT_RX 12
+#define BT_TX 13
+SoftwareSerial btSerial(BT_TX, BT_RX); // RX, TX
+
+
+#endif
 
 // STM32 (BluePill) - плату выбирал STM32F103C
 #elif (MCU_TYPE == 2)
@@ -141,8 +184,8 @@ String runningText = "";
 
 static const byte maxDim = max(WIDTH, HEIGHT);
 byte buttons = 4;   // 0 - верх, 1 - право, 2 - низ, 3 - лево, 4 - не нажата
-int globalBrightness = BRIGHTNESS;
-byte globalSpeed = 200;
+int8_t globalBrightness = BRIGHTNESS;
+int8_t globalSpeed = D_EFFECT_SPEED-30;
 uint32_t globalColor = 0x00ff00;   // цвет при запуске зелёный
 byte breathBrightness;
 boolean loadingFlag = true;
@@ -155,7 +198,7 @@ int8_t thisMode = 0;
 boolean controlFlag = false;
 boolean gamemodeFlag = false;
 boolean mazeMode = false;
-int effects_speed = D_EFFECT_SPEED;
+//int effects_speed = D_EFFECT_SPEED;
 int8_t hrs = 10, mins = 25, secs;
 boolean dotFlag;
 byte modeCode;    // 0 бегущая, 1 часы, 2 игры, 3 нойс маднесс и далее, 21 гифка или картинка,
@@ -186,8 +229,13 @@ RTC_DS3231 rtc;
 #endif
 
 void setup() {
-#if (BT_MODE == 1)
+//#if (BT_MODE == 1)
   Serial.begin(9600);
+//#endif
+
+#if HARDWARE_BT_SERIAL
+#else
+    btSerial.begin(9600);
 #endif
 
 #if (MCU_TYPE == 1)
